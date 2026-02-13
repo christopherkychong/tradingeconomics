@@ -9,7 +9,7 @@
  * 
  * @author     Christopher Chong
  * @version    1.0
- * @created    13 February 2026
+ * @created    14 February 2026
  * 
  * ===================================================================
  */
@@ -284,5 +284,284 @@ async function fetchCountryData(country) {
         }
         
         return null;
+    }
+}
+
+// ===================================================================
+// SECTION 6: CORE COMPARISON LOGIC
+// ===================================================================
+
+/**
+ * Compare Two Countries
+ * -----------------------------------------
+ * Main function called when user clicks the Compare button.
+ * 1. Validate user input
+ * 2. Show loading state
+ * 3. Fetch data for both countries
+ * 4. Process the data
+ * 5. Render the comparison table
+ * 
+ * 
+ * @async
+ * @function compareCountries
+ * @returns {Promise<void>}
+ */
+async function compareCountries() {
+    // Log to console for debugging - helps trace user interaction
+    console.log("🔍 [UI] Compare button clicked");
+    
+    // -----------------------------------------------------------------
+    // Step 1: Get references to DOM elements
+    // -----------------------------------------------------------------
+    // We need these elements to read values and update the UI
+    const country1Select = document.getElementById("country1");
+    const country2Select = document.getElementById("country2");
+    const resultsContainer = document.getElementById("results");
+    const timestampContainer = document.getElementById("timestamp");
+    
+    // Guard clause: exit if required DOM elements don't exist
+    // This prevents errors if someone accidentally removes an element from HTML
+    if (!country1Select || !country2Select || !resultsContainer) {
+        console.error("❌ [UI] Required DOM elements not found");
+        return;
+    }
+    
+    // -----------------------------------------------------------------
+    // Step 2: Get selected values from dropdowns
+    // -----------------------------------------------------------------
+    // .value property gives us the country code (e.g., "united states")
+    const country1 = country1Select.value;
+    const country2 = country2Select.value;
+    
+    // Log selected countries for debugging
+    console.log(`📌 [UI] Selected: ${country1} vs ${country2}`);
+    
+    // -----------------------------------------------------------------
+    // Step 3: Validate user selection
+    // -----------------------------------------------------------------
+    
+    // Check if both countries are selected (not empty)
+    if (!country1 || !country2) {
+        // Show alert to user - this is a quick feedback mechanism
+        alert("Please select both countries to compare.");
+        return;
+    }
+    
+    // Prevent comparing the same country
+    if (country1 === country2) {
+        alert("Please select two different countries to compare.");
+        return;
+    }
+    
+    // -----------------------------------------------------------------
+    // Step 4: Prevent multiple simultaneous requests
+    // -----------------------------------------------------------------
+    // The isLoading flag prevents users from clicking multiple times
+    // while a request is already in progress
+    if (isLoading) {
+        console.log("⏳ Already loading data. Please wait.");
+        // Optionally show a toast or notification here
+        return;
+    }
+    
+    // Set loading flag to true - prevents additional clicks
+    isLoading = true;
+    
+    // -----------------------------------------------------------------
+    // Step 5: Show loading state in UI
+    // -----------------------------------------------------------------
+    // Clear any previous results and show loading spinner
+    resultsContainer.innerHTML = `
+        <div class="loading">
+            <div class="spinner"></div>
+            <p style="font-size: 1.2rem; margin-bottom: 8px;">Fetching economic data...</p>
+            <p style="color: #64748b;">Retrieving ${formatCountryName(country1)} and ${formatCountryName(country2)}</p>
+            <p style="color: #94a3b8; font-size: 0.9rem; margin-top: 15px;">
+                This may take a few seconds depending on API response time
+            </p>
+        </div>
+    `;
+    
+    // Clear any existing timestamp
+    if (timestampContainer) {
+        timestampContainer.innerHTML = '';
+    }
+    
+    // -----------------------------------------------------------------
+    // Step 6: Fetch data for both countries
+    // -----------------------------------------------------------------
+    /**
+     * Using Promise.all for parallel requests
+     */
+    try {
+        const [data1, data2] = await Promise.all([
+            fetchCountryData(country1),
+            fetchCountryData(country2)
+        ]);
+        
+        // -----------------------------------------------------------------
+        // Step 7: Check if either fetch failed
+        // -----------------------------------------------------------------
+        // fetchCountryData returns null on error, so we check for that
+        if (!data1 || !data2) {
+            console.error("❌ [API] One or both requests failed");
+            
+            // Show user-friendly error message
+            resultsContainer.innerHTML = `
+                <div class="error-message">
+                    <div style="font-size: 1.5rem; margin-bottom: 10px;">❌</div>
+                    <h3 style="margin-bottom: 10px; color: #7f1d1d;">Failed to retrieve economic data</h3>
+                    <p style="margin-bottom: 10px; color: #991b1b;">
+                        The API may be rate-limited or the selected countries might not have data available.
+                    </p>
+                    <p style="margin-top: 15px; color: #64748b; font-size: 0.9rem;">
+                        Try:
+                        <br>• Waiting a few seconds and trying again
+                        <br>• Selecting different countries
+                        <br>• Checking your API key in script.js
+                    </p>
+                </div>
+            `;
+            
+            // Reset loading flag
+            isLoading = false;
+            return;
+        }
+        
+        // Check if data arrays are empty (no indicators returned)
+        if (data1.length === 0 || data2.length === 0) {
+            console.warn("⚠️ [API] Empty response received");
+            
+            resultsContainer.innerHTML = `
+                <div class="error-message" style="border-left-color: #f59e0b;">
+                    <div style="font-size: 1.5rem; margin-bottom: 10px;">⚠️</div>
+                    <h3 style="margin-bottom: 10px; color: #92400e;">No data available</h3>
+                    <p style="color: #78350f;">
+                        The selected countries may not have the requested indicators in the free tier.
+                    </p>
+                </div>
+            `;
+            
+            isLoading = false;
+            return;
+        }
+        
+        // Log success for debugging
+        console.log("✅ [API] Both countries fetched successfully");
+        console.log(`📊 ${formatCountryName(country1)}:`, data1);
+        console.log(`📊 ${formatCountryName(country2)}:`, data2);
+        
+        // -----------------------------------------------------------------
+        // Step 8: Process the raw API data
+        // -----------------------------------------------------------------
+        /**
+         * The raw API response contains many fields we don't need.
+         * processComparisonData extracts only:
+         * - GDP
+         * - Population
+         * - Inflation Rate
+         * 
+         * It returns a clean, structured array ready for display
+         */
+        const indicators = processComparisonData(data1, data2);
+        
+        console.log("📋 Processed indicators ready for rendering:", indicators);
+        
+        // -----------------------------------------------------------------
+        // Step 9: Render the comparison table
+        // -----------------------------------------------------------------
+        // Pass the processed data to our rendering function
+        renderTable(indicators, country1, country2);
+        
+        // -----------------------------------------------------------------
+        // Step 10: Reset loading flag
+        // -----------------------------------------------------------------
+        isLoading = false;
+        
+        console.log("✅ [UI] Comparison complete");
+        
+    } catch (error) {
+        // -----------------------------------------------------------------
+        // Step 11: Catch any unexpected errors
+        // -----------------------------------------------------------------
+        // This catches errors not handled in fetchCountryData
+        console.error("❌ [ERROR] Unexpected error in compareCountries:", error);
+        
+        resultsContainer.innerHTML = `
+            <div class="error-message">
+                <div style="font-size: 1.5rem; margin-bottom: 10px;">❌</div>
+                <h3 style="margin-bottom: 10px; color: #7f1d1d;">Unexpected Error</h3>
+                <p style="color: #991b1b;">
+                    Something went wrong. Please try again or check the console for details.
+                </p>
+            </div>
+        `;
+        
+        // Always reset loading flag, even on error
+        isLoading = false;
+    }
+
+/**
+ * Show Loading State
+ * -----------------------------------------
+ * Displays loading spinner while waiting for API response.
+ * This is a helper function that can be called from multiple places.
+ * 
+ * @param {string} country1 - First country name
+ * @param {string} country2 - Second country name
+ */
+function showLoading(country1, country2) {
+    const resultsContainer = document.getElementById("results");
+    const timestampContainer = document.getElementById("timestamp");
+    
+    if (!resultsContainer) return;
+    
+    resultsContainer.innerHTML = `
+        <div class="loading">
+            <div class="spinner"></div>
+            <p style="font-size: 1.2rem; margin-bottom: 8px;">Fetching economic data...</p>
+            <p style="color: #64748b;">Retrieving ${formatCountryName(country1)} and ${formatCountryName(country2)}</p>
+            <p style="color: #94a3b8; font-size: 0.9rem; margin-top: 15px;">
+                This may take a few seconds depending on API response time
+            </p>
+        </div>
+    `;
+    
+    if (timestampContainer) {
+        timestampContainer.innerHTML = '';
+    }
+}
+
+/**
+ * Show Error Message
+ * -----------------------------------------
+ * Displays user-friendly error messages when something goes wrong.
+ * 
+ * @param {string} title - Error title
+ * @param {string} message - Detailed error message
+ * @param {string} type - Error type: "error" (red) or "warning" (orange)
+ */
+function showError(title, message, type = "error") {
+    const resultsContainer = document.getElementById("results");
+    const timestampContainer = document.getElementById("timestamp");
+    
+    if (!resultsContainer) return;
+    
+    const borderColor = type === "error" ? "#dc2626" : "#f59e0b";
+    const bgColor = type === "error" ? "#fef2f2" : "#fffbeb";
+    const titleColor = type === "error" ? "#7f1d1d" : "#92400e";
+    const textColor = type === "error" ? "#991b1b" : "#78350f";
+    const icon = type === "error" ? "❌" : "⚠️";
+    
+    resultsContainer.innerHTML = `
+        <div class="error-message" style="border-left-color: ${borderColor}; background-color: ${bgColor};">
+            <div style="font-size: 1.5rem; margin-bottom: 10px;">${icon}</div>
+            <h3 style="margin-bottom: 10px; color: ${titleColor};">${title}</h3>
+            <p style="color: ${textColor};">${message}</p>
+        </div>
+    `;
+    
+    if (timestampContainer) {
+        timestampContainer.innerHTML = '';
     }
 }
