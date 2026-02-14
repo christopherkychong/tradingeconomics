@@ -25,7 +25,7 @@
  * 
  * @constant {string}
  */
-const API_KEY = "22b3b238ed6f4dc:g66j1fwewf16ldm"; // Replace with your actual API key
+const API_KEY = "YOUR_API_KEY_HERE"; // Replace with your actual API key
 
 /**
  * Application State
