@@ -2,8 +2,8 @@
 
 *A responsive web application that compares key economic indicators between countries using the live Trading Economics API.*
 
-![App Screenshot_1](./screen_shot_mexico_sweden_selected.png)
-![App Screenshot_2](./screen_shot_mexico_sweden_data.png)
+![App Screenshot_1](./screen_shot_newzealand_thailand_selected.png)
+![App Screenshot_2](./screen_shot_newzealand_thailand_data.png)
 
 ---
 
