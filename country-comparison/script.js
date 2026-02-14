@@ -25,7 +25,7 @@
  * 
  * @constant {string}
  */
-const API_KEY = "22b3b238ed6f4dc:g66j1fwewf16ldm";
+const API_KEY = "YOUR_API_KEY_HERE"; // Replace with your actual API key
 
 /**
  * Application State
@@ -203,11 +203,8 @@ window.onload = function() {
     console.log(`✅ Application initialized. Loaded ${COUNTRIES.length} countries.`);
     console.log(`📌 Default comparison: Mexico vs Sweden`);
     
-    // Note about CORS proxy
-    console.log(`
-        🔧 CORS NOTE: This app uses All Origins proxy to bypass CORS restrictions.
-        The proxy is working and should not require additional configuration.
-    `);
+    // Check CORS and add warnings/info
+    checkCORSAndAddWarning();
 };
 
 // ===================================================================
@@ -223,7 +220,7 @@ window.onload = function() {
  * API ENDPOINT:
  *   GET /country/{country}
  * 
- * WHY PROXY? Trading Economics API does not include CORS headers,
+ * Trading Economics API does not include CORS headers,
  * so browsers block direct requests. All Origins is a free proxy
  * that adds the necessary headers to allow the request.
  * 
@@ -246,6 +243,8 @@ async function fetchCountryData(country) {
      * Using All Origins proxy (api.allorigins.win)
      * This free proxy adds CORS headers to responses, allowing
      * browser JavaScript to access APIs that don't support CORS.
+     * 
+     * Format: https://api.allorigins.win/raw?url={encoded-url}
      */
     const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(originalUrl)}`;
     
@@ -293,6 +292,55 @@ async function fetchCountryData(country) {
         }
         
         return null;
+    }
+}
+
+// ===================================================================
+// SECTION 5A: CORS DETECTION & USER GUIDANCE
+// ===================================================================
+
+/**
+ * Check if running locally and add helpful warnings
+ * -----------------------------------------
+ * This function detects if the app is running from file:// protocol
+ * and adds a visible warning to the user about CORS.
+ */
+function checkCORSAndAddWarning() {
+    const protocol = window.location.protocol;
+    const container = document.querySelector('.container');
+    const infoBanner = document.getElementById('info-banner');
+    
+    if (!infoBanner) return;
+    
+    // Check if running from file:// (direct file open)
+    if (protocol === 'file:') {
+        console.warn(`
+            ⚠️ CORS WARNING: You're running from file:// protocol
+            API requests will FAIL due to CORS policy.
+            
+            ✅ To fix: Use Live Server or Python HTTP server
+        `);
+        
+        // Add visible warning to UI
+        infoBanner.innerHTML = `
+            <div class="warning-banner">
+                <strong style="color: #92400e;">⚠️ CORS Warning</strong>
+                <p style="color: #78350f; margin-top: 5px; margin-bottom: 0;">
+                    You're running from file:// protocol. API requests will fail.
+                    Use Live Server or Python HTTP server.
+                </p>
+            </div>
+        `;
+    } else {
+        console.log("✅ Running on local server - CORS proxy enabled");
+        
+        // Add info about proxy
+        infoBanner.innerHTML = `
+            <div class="info-banner">
+                <span style="color: #0050b3;">🔄 Using All Origins proxy to bypass CORS</span>
+                <span style="color: #666; margin-left: 15px;">Free tier: Sweden, Mexico, NZ, Thailand</span>
+            </div>
+        `;
     }
 }
 
@@ -431,8 +479,6 @@ async function compareCountries() {
  * Takes raw API response data for two countries and extracts
  * the specific indicators we need (GDP, Population, Inflation Rate)
  * 
- * IMPORTANT: The API uses "Category" field, not "Indicator" field
- * 
  * @param {Array} data1 - API response array for first country
  * @param {Array} data2 - API response array for second country
  * @returns {Array} Processed indicators ready for rendering
@@ -456,6 +502,7 @@ function processComparisonData(data1, data2) {
         }
         
         // Find the object where Category matches what is being looked for
+        // The API uses "Category" field, not "Indicator"
         const item = data.find(d => d && d.Category === indicatorName);
         
         if (!item) {
