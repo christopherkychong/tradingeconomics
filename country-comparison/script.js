@@ -8,7 +8,7 @@
  * DEPENDS:  Trading Economics API, index.html
  * 
  * @author     Christopher Chong
- * @version    2.2
+ * @version    2.4
  * @created    14 February 2026
  * 
  * ===================================================================
@@ -25,7 +25,7 @@
  * 
  * @constant {string}
  */
-const API_KEY = "YOUR_API_KEY_HERE"; // Replace with your actual API key
+const API_KEY = "22b3b238ed6f4dc:g66j1fwewf16ldm"; // Replace with your actual API key
 
 /**
  * Application State
@@ -86,6 +86,55 @@ function formatCountryName(countryCode) {
 }
 
 /**
+ * Normalize economic values
+ * -----------------------------------------
+ * Some API responses return values already in billions/trillions
+ * This function converts them to raw numbers for consistent formatting
+ * 
+ * @param {number} value - The value from API
+ * @param {string} indicatorName - Name of indicator (GDP, Population, etc.)
+ * @returns {number} Normalized raw value
+ */
+function normalizeValue(value, indicatorName) {
+    if (typeof value !== 'number') return value;
+    
+    // GDP is typically in trillions or billions
+    if (indicatorName === "GDP") {
+        // If value is between 0.1 and 1000, it's likely in trillions
+        if (value > 0.1 && value < 1000) {
+            console.log(`🔄 Normalizing GDP from ${value} to ${value * 1_000_000_000_000}`);
+            return value * 1_000_000_000_000; // Convert trillions to raw
+        }
+        // If value is between 1000 and 1,000,000, it's likely in billions
+        if (value >= 1000 && value < 1_000_000) {
+            console.log(`🔄 Normalizing GDP from ${value} to ${value * 1_000_000_000}`);
+            return value * 1_000_000_000; // Convert billions to raw
+        }
+    }
+    
+    // Population is typically in millions
+    if (indicatorName === "Population") {
+        if (value > 0.1 && value < 1000) {
+            console.log(`🔄 Normalizing Population from ${value} to ${value * 1_000_000}`);
+            return value * 1_000_000; // Convert millions to raw
+        }
+        // Some APIs return population in thousands
+        if (value >= 1000 && value < 1_000_000) {
+            console.log(`🔄 Normalizing Population from ${value} to ${value * 1_000}`);
+            return value * 1_000; // Convert thousands to raw
+        }
+    }
+    
+    // Inflation rate typically comes as percentage (e.g., 3.79 for 3.79%)
+    if (indicatorName === "Inflation Rate") {
+        // No normalization needed - keep as is for percentage formatting
+        return value;
+    }
+    
+    return value;
+}
+
+/**
  * Format Number for Display
  * -----------------------------------------
  * Converts raw numbers into human-readable format with appropriate
@@ -111,40 +160,36 @@ function formatNumber(value, type = "number") {
     
     /**
      * Percentage formatting
-     * 
-     * Inflation rate comes as percentage already (3.79 = 3.79%)
-     * Just add % symbol
      */
     if (type === "percentage") {
         return value.toFixed(2) + '%';
     }
     
     /**
-     * Number formatting with thousand separators
-     * 
-     * GDP values can be huge (trillions). Check if value is in
-     * millions, billions, or trillions and format appropriately.
+     * Number formatting with appropriate units
      */
     
     // Handle trillions (values over 1 trillion)
-    if (value > 1_000_000_000_000) {
+    if (Math.abs(value) > 1_000_000_000_000) {
         return (value / 1_000_000_000_000).toFixed(2) + ' T';
     }
     
     // Handle billions (values over 1 billion)
-    if (value > 1_000_000_000) {
+    if (Math.abs(value) > 1_000_000_000) {
         return (value / 1_000_000_000).toFixed(2) + ' B';
     }
     
     // Handle millions (values over 1 million)
-    if (value > 1_000_000) {
+    if (Math.abs(value) > 1_000_000) {
         return (value / 1_000_000).toFixed(2) + ' M';
     }
     
-    /**
-     * Regular number formatting with thousand separators
-     * and 2 decimal places
-     */
+    // Handle thousands (values over 1 thousand)
+    if (Math.abs(value) > 1_000) {
+        return (value / 1_000).toFixed(2) + ' K';
+    }
+    
+    // Regular number formatting with thousand separators
     return value.toLocaleString(undefined, {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2
@@ -220,10 +265,6 @@ window.onload = function() {
  * API ENDPOINT:
  *   GET /country/{country}
  * 
- * Trading Economics API does not include CORS headers,
- * so browsers block direct requests. All Origins is a free proxy
- * that adds the necessary headers to allow the request.
- * 
  * @async
  * @param {string} country - Country name (lowercase)
  * @returns {Promise<Array|null>} Array of indicator objects or null if error
@@ -238,59 +279,31 @@ async function fetchCountryData(country) {
     const originalUrl = `https://api.tradingeconomics.com/country/${encodeURIComponent(country)}?c=${API_KEY}&format=json`;
     
     /**
-     * CORS Proxy URL
-     * -----------------------------------------
-     * Using All Origins proxy (api.allorigins.win)
-     * This free proxy adds CORS headers to responses, allowing
-     * browser JavaScript to access APIs that don't support CORS.
-     * 
-     * Format: https://api.allorigins.win/raw?url={encoded-url}
+     * CORS Proxy URL - Using All Origins proxy
      */
     const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(originalUrl)}`;
     
     console.log(`📡 Request URL (via proxy): ${proxyUrl}`);
     
     try {
-        /**
-         * Execute fetch request through the proxy
-         */
         const response = await fetch(proxyUrl);
         
-        // Check HTTP status
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
         
-        // Parse JSON response
         const data = await response.json();
         
-        // Validate response data
         if (!Array.isArray(data) || data.length === 0) {
             console.warn(`⚠️ [API] No data returned for ${country}`);
             return null;
         }
         
         console.log(`✅ [API] Received ${data.length} indicators for ${country}`);
-        
-        // Log a sample of the data to help debugging
-        if (data.length > 0) {
-            console.log(`📋 Sample indicator:`, data[0]);
-        }
-        
-        // Return the parsed data
         return data;
         
     } catch (error) {
         console.error(`❌ [API] Error fetching ${country}:`, error.message);
-        
-        // Special handling for common errors
-        if (error.message.includes('Failed to fetch')) {
-            console.warn(`
-                🔧 PROXY ERROR: The All Origins proxy may be temporarily unavailable.
-                Try waiting a few seconds and trying again.
-            `);
-        }
-        
         return null;
     }
 }
@@ -307,7 +320,6 @@ async function fetchCountryData(country) {
  */
 function checkCORSAndAddWarning() {
     const protocol = window.location.protocol;
-    const container = document.querySelector('.container');
     const infoBanner = document.getElementById('info-banner');
     
     if (!infoBanner) return;
@@ -501,7 +513,7 @@ function processComparisonData(data1, data2) {
             return "N/A";
         }
         
-        // Find the object where Category matches what is being looked for
+        // Find the object where Category matches what's being looked for
         // The API uses "Category" field, not "Indicator"
         const item = data.find(d => d && d.Category === indicatorName);
         
@@ -513,16 +525,21 @@ function processComparisonData(data1, data2) {
         /**
          * The API uses LatestValue field for the current value
          */
+        let value = "N/A";
         if (item.LatestValue !== undefined && item.LatestValue !== null) {
-            return item.LatestValue;
+            value = item.LatestValue;
         } else if (item.LastValue !== undefined && item.LastValue !== null) {
-            return item.LastValue;
+            value = item.LastValue;
         } else if (item.Value !== undefined && item.Value !== null) {
-            return item.Value;
+            value = item.Value;
         }
         
-        console.warn(`⚠️ [DATA] No value field found for ${indicatorName}`, item);
-        return "N/A";
+        // Normalize the value if it's a number
+        if (typeof value === 'number') {
+            value = normalizeValue(value, indicatorName);
+        }
+        
+        return value;
     }
     
     /**
@@ -530,25 +547,25 @@ function processComparisonData(data1, data2) {
      */
     const indicators = [
         {
-            name: "GDP (USD Billion)",
+            name: "GDP",
             country1: extractValue(data1, "GDP"),
             country2: extractValue(data2, "GDP"),
             format: "number",
             description: "Gross Domestic Product"
         },
         {
-            name: "Population (Million)",
+            name: "Population",
             country1: extractValue(data1, "Population"),
             country2: extractValue(data2, "Population"),
             format: "number",
             description: "Total population"
         },
         {
-            name: "Inflation Rate (%)",
+            name: "Inflation Rate",
             country1: extractValue(data1, "Inflation Rate"),
             country2: extractValue(data2, "Inflation Rate"),
             format: "percentage",
-            description: "Annual percentage change in consumer prices"
+            description: "Annual change in consumer prices"
         }
     ];
     
@@ -583,31 +600,42 @@ function renderTable(indicators, country1, country2) {
     /**
      * Calculate Difference Between Values
      */
-    function calculateDifference(val1, val2) {
+    function calculateDifference(val1, val2, formatType) {
+        // If either value is N/A or not a number, can't calculate difference
         if (val1 === "N/A" || val2 === "N/A" || 
             typeof val1 !== 'number' || typeof val2 !== 'number') {
-            return { text: "N/A", class: "" };
+            return { 
+                text: "N/A", 
+                class: "",
+                value: null 
+            };
         }
         
         const diff = val1 - val2;
         
+        // Format the difference text with appropriate units
         let diffText;
         if (diff > 0) {
-            diffText = "+" + formatNumber(diff);
+            diffText = "+" + formatNumber(diff, formatType);
         } else if (diff < 0) {
-            diffText = formatNumber(diff);
+            diffText = formatNumber(diff, formatType); // Already has minus sign
         } else {
-            diffText = "0.00";
+            diffText = formatNumber(0, formatType);
         }
         
+        // Determine CSS class for color coding
         let diffClass = "";
         if (diff > 0) {
-            diffClass = "positive-diff";
+            diffClass = "positive-diff"; // Green
         } else if (diff < 0) {
-            diffClass = "negative-diff";
+            diffClass = "negative-diff"; // Orange
         }
         
-        return { text: diffText, class: diffClass };
+        return {
+            text: diffText,
+            class: diffClass,
+            value: diff
+        };
     }
     
     /**
@@ -618,36 +646,47 @@ function renderTable(indicators, country1, country2) {
             <span>📊</span> ${formatCountryName(country1)} vs ${formatCountryName(country2)}
         </h2>
         
-        <table class="comparison-table">
+        <table class="comparison-table" style="width: 100%; border-collapse: collapse; margin-top: 20px; background-color: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
             <thead>
-                <tr>
-                    <th>Economic Indicator</th>
-                    <th>${formatCountryName(country1)}</th>
-                    <th>${formatCountryName(country2)}</th>
-                    <th>Difference</th>
+                <tr style="background-color: #1e293b; color: white;">
+                    <th style="padding: 12px 15px; text-align: left;">Economic Indicator</th>
+                    <th style="padding: 12px 15px; text-align: right;">${formatCountryName(country1)}</th>
+                    <th style="padding: 12px 15px; text-align: right;">${formatCountryName(country2)}</th>
+                    <th style="padding: 12px 15px; text-align: right;">Difference</th>
                 </tr>
             </thead>
             <tbody>
     `;
     
+    // Loop through each indicator and create a table row
     indicators.forEach(indicator => {
         const val1 = indicator.country1;
         const val2 = indicator.country2;
         
+        // Format values using our number formatter
         const formatted1 = formatNumber(val1, indicator.format);
         const formatted2 = formatNumber(val2, indicator.format);
-        const diff = calculateDifference(val1, val2);
+        
+        // Calculate difference with proper formatting
+        const diff = calculateDifference(val1, val2, indicator.format);
+        
+        // Add row to table with inline styles to ensure colors work
+        const diffStyle = diff.class === 'positive-diff' 
+            ? 'color: #0b7e4b; font-weight: bold;' 
+            : diff.class === 'negative-diff' 
+                ? 'color: #b45309; font-weight: bold;' 
+                : '';
         
         tableHtml += `
-            <tr>
-                <td>
+            <tr style="border-bottom: 1px solid #e2e8f0;">
+                <td style="padding: 12px 15px;">
                     <strong>${indicator.name}</strong>
                     <br>
                     <small style="color: #64748b; font-weight: normal; font-size: 0.8rem;">${indicator.description || ''}</small>
                 </td>
-                <td>${formatted1}</td>
-                <td>${formatted2}</td>
-                <td class="${diff.class}">${diff.text}</td>
+                <td style="padding: 12px 15px; text-align: right; font-family: monospace;">${formatted1}</td>
+                <td style="padding: 12px 15px; text-align: right; font-family: monospace;">${formatted2}</td>
+                <td style="padding: 12px 15px; text-align: right; font-family: monospace; ${diffStyle}">${diff.text}</td>
             </tr>
         `;
     });
@@ -683,6 +722,8 @@ function renderTable(indicators, country1, country2) {
             <span>⚡ Free tier - Sweden, Mexico, New Zealand, Thailand only</span>
         `;
     }
+    
+    console.log("✅ [UI] Table rendered successfully");
 }
 
 /**
