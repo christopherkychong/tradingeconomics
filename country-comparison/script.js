@@ -565,3 +565,160 @@ function showError(title, message, type = "error") {
         timestampContainer.innerHTML = '';
     }
 }
+
+// ===================================================================
+// SECTION 7: DATA PROCESSING
+// ===================================================================
+
+/**
+ * Process Comparison Data
+ * -----------------------------------------
+ * Takes raw API response data for two countries and extracts
+ * the specific indicators we need (GDP, Population, Inflation Rate)
+ * into a structured format ready for display.
+ * 
+ * This function finds the relevant indicators and formats them
+ * for comparison.
+ * 
+ * @param {Array} data1 - API response array for first country
+ * @param {Array} data2 - API response array for second country
+ * @returns {Array} Processed indicators ready for rendering
+ */
+function processComparisonData(data1, data2) {
+    console.log("🔄 [DATA] Processing economic indicators...");
+    
+    /**
+     * Helper Function: Extract Value
+     * -----------------------------------------
+     * Finds a specific indicator in the API response and returns its value.
+     * 
+     * @param {Array} data - API response array
+     * @param {string} indicatorName - Name of indicator to find (e.g., "GDP")
+     * @returns {number|string} The indicator value or "N/A" if not found
+     */
+    function extractValue(data, indicatorName) {
+        // Guard clause: if data is invalid, return N/A
+        if (!Array.isArray(data) || data.length === 0) {
+            return "N/A";
+        }
+        
+        // Find the object where Indicator matches what we're looking for
+        const item = data.find(d => d && d.Indicator === indicatorName);
+        
+        if (!item) {
+            console.warn(`⚠️ [DATA] Indicator "${indicatorName}" not found in response`);
+            return "N/A";
+        }
+        
+        /**
+         * Different APIs use different field names for the value.
+         */
+        if (item.LatestValue !== undefined && item.LatestValue !== null) {
+            return item.LatestValue;
+        } else if (item.LastValue !== undefined && item.LastValue !== null) {
+            return item.LastValue;
+        } else if (item.Value !== undefined && item.Value !== null) {
+            return item.Value;
+        }
+        
+        // If no value field was found
+        console.warn(`⚠️ [DATA] No value field found for ${indicatorName}`, item);
+        return "N/A";
+    }
+    
+    /**
+     * Build the comparison dataset
+     */
+    const indicators = [
+        {
+            name: "GDP (USD Billion)",
+            country1: extractValue(data1, "GDP"),
+            country2: extractValue(data2, "GDP"),
+            format: "number",
+            description: "Gross Domestic Product - total value of goods and services"
+        },
+        {
+            name: "Population (Million)",
+            country1: extractValue(data1, "Population"),
+            country2: extractValue(data2, "Population"),
+            format: "number",
+            description: "Total population - may be shown in thousands or millions"
+        },
+        {
+            name: "Inflation Rate (%)",
+            country1: extractValue(data1, "Inflation Rate"),
+            country2: extractValue(data2, "Inflation Rate"),
+            format: "percentage",
+            description: "Annual percentage change in consumer prices"
+        }
+    ];
+    
+    console.log("✅ [DATA] Processed indicators:", indicators);
+    return indicators;
+}
+
+/**
+ * Format Number for Display
+ * -----------------------------------------
+ * Converts raw numbers into human-readable format with appropriate
+ * units and decimal places:
+ * - 25462700 → "25,462.70" (GDP in billions handled separately)
+ * - 3.14159 → "3.14"
+ * - 0.05 → "5.00%" (for percentages)
+ * 
+ * @param {number|string} value - The value to format
+ * @param {string} type - Format type: "number" or "percentage"
+ * @returns {string} Formatted value
+ */
+function formatNumber(value, type = "number") {
+    // Handle N/A values
+    if (value === "N/A" || value === null || value === undefined) {
+        return "N/A";
+    }
+    
+    // If it's not a number (but also not N/A), return as is
+    if (typeof value !== 'number') {
+        return String(value);
+    }
+    
+    /**
+     * Percentage formatting
+     * 
+     * Inflation rate comes as decimal (0.05 = 5%)
+     * We multiply by 100 and add % symbol
+     */
+    if (type === "percentage") {
+        return (value * 100).toFixed(2) + '%';
+    }
+    
+    /**
+     * Number formatting with thousand separators
+     * 
+     * GDP values can be huge (trillions). Check if value is in
+     * millions, billions, or trillions and format appropriately.
+     */
+    
+    // Handle trillions (values over 1 trillion)
+    if (value > 1_000_000_000_000) {
+        return (value / 1_000_000_000_000).toFixed(2) + ' T';
+    }
+    
+    // Handle billions (values over 1 billion)
+    if (value > 1_000_000_000) {
+        return (value / 1_000_000_000).toFixed(2) + ' B';
+    }
+    
+    // Handle millions (values over 1 million)
+    if (value > 1_000_000) {
+        return (value / 1_000_000).toFixed(2) + ' M';
+    }
+    
+    /**
+     * Regular number formatting with thousand separators
+     * and 2 decimal places
+     */
+    return value.toLocaleString(undefined, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
+}}
